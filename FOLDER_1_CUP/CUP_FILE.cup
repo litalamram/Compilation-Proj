@@ -1,0 +1,230 @@
+/*************/
+/* IMPORT(S) */
+/*************/
+import java_cup.runtime.*;
+import AST.*;
+
+parser code 
+{:
+	public Lexer lexer;
+
+	public Parser(Lexer lexer)
+	{
+		super(lexer);
+		this.lexer = lexer;
+	}
+	public int getParseCol(){
+    	return lexer.getTokenStartPosition();
+    }
+	public void report_error(String message, Object info)
+	{
+		System.out.print("ERROR >> ");
+		System.out.print("[");
+		System.out.print(lexer.getLine());
+		System.out.print(":");
+		System.out.print(lexer.getCharPos());
+		System.out.print("] ");
+		throw new ParserException();
+	}
+
+	public void setLine(AST_Node ast, int line){
+	    ast.setLineNumber(line+1);
+	}
+:}
+
+/************************/
+/* CUSTOMIZE CUP PARSER */
+/************************/
+scan with
+{:
+	Symbol s;
+	s = lexer.next_token();
+	//System.out.print(s.sym);
+	System.out.print("[");
+	System.out.print(lexer.getLine());
+	System.out.print(":");
+	System.out.print(lexer.getCharPos());
+	System.out.print("] ");
+	System.out.print(TokenNames.terminalNames[s.sym]);
+	if (s.value != null)
+	{
+		System.out.print("( ");
+		System.out.print(s.value);
+		System.out.print(" )");
+	}
+	System.out.print("\n");
+	return s;
+:};
+
+
+
+
+/*************/
+/* TERMINALS */
+/*************/
+terminal IF;
+terminal EQ;
+terminal DOT;
+terminal PLUS;
+terminal MINUS;
+terminal TIMES;
+terminal WHILE;
+terminal DIVIDE;
+terminal LPAREN;
+terminal RPAREN;
+terminal LBRACK;
+terminal RBRACK;
+terminal LBRACE;
+terminal RBRACE;
+terminal SEMICOLON;
+terminal ASSIGN;
+
+terminal COMMA;
+terminal LT;
+terminal GT;
+terminal CLASS;
+terminal NIL;
+terminal ARRAY;
+terminal EXTENDS;
+terminal RETURN;
+terminal NEW;
+
+/*************/
+/* TERMINALS */
+/*************/
+terminal Integer INT;
+terminal String ID;
+terminal String STRING;
+
+/*****************/
+/* NON TERMINALS */
+/*****************/
+non terminal AST_EXP exp;
+non terminal AST_NEW_EXP newExp;
+non terminal AST_VAR var;
+non terminal AST_STMT stmt;
+non terminal AST_STMT_LIST stmtList;
+non terminal AST_VARDEC_EXP varDec;
+non terminal AST_EXPREG expReg;
+non terminal AST_EXP_LIST expList;
+non terminal AST_PROGRAM Program;
+non terminal AST_DEC dec;
+non terminal AST_DEC_FUNCDEC funcDec;
+non terminal AST_DEC_CLASSDEC classDec;
+non terminal AST_DEC_ARRAYDEC arrayDec;
+non terminal AST_CFIELD cField;
+non terminal AST_TYPE_NAME typeName;
+non terminal AST_TYPE_NAME_LIST	typeNameListComma;
+non terminal AST_CFIELD_LIST cFieldList;
+
+/***********************/
+/* OPERATOR PRECEDENCE */
+/***********************/
+precedence nonassoc ASSIGN; //:=
+precedence left EQ; //=
+precedence left LT,GT; //<, >
+precedence left PLUS,MINUS; //+
+precedence left TIMES,DIVIDE;
+precedence right LBRACK;
+precedence right LPAREN; //(
+precedence left DOT;
+
+/************************/
+/* START WITH: Program */
+/************************/
+start with Program;
+
+/********************/
+/* DERIVATION RULES */
+/********************/
+
+Program	::= 	dec:d 	{: RESULT = new AST_PROGRAM(d, null);  setLine(RESULT, dleft);  :}
+				| dec:d Program:p {: RESULT = new AST_PROGRAM(d, p);   setLine(RESULT, dleft); :}
+				;
+
+dec	::= 	funcDec:f	{: RESULT = f; :}
+			| varDec:v	{: RESULT = new AST_DEC_VARDEC(v);:}
+			| classDec:c	{: RESULT = c; :}
+			| arrayDec:a	{: RESULT = a;:}
+			;
+
+
+varDec	::= 	ID:name1 ID:name2 SEMICOLON	{: RESULT = new AST_VARDEC_EXP(name1,name2, null, name1left+1, name2left+1);                    setLine(RESULT, name1left);:}
+				| ID:name1 ID:name2 ASSIGN exp:e SEMICOLON	{: RESULT = new AST_VARDEC_EXP(name1, name2, e, name1left+1, name2left+1);      setLine(RESULT, name1left); :}
+				| ID:name1 ID:name2 ASSIGN newExp:ne SEMICOLON	{: RESULT = new AST_VARDEC_EXP(name1, name2, ne, name1left+1, name2left+1); setLine(RESULT, name1left); :}
+				;
+
+funcDec	::= 	ID:name1 ID:name2 LPAREN RPAREN LBRACE stmtList:sl RBRACE	{: RESULT = new AST_DEC_FUNCDEC(name1, name2, null, sl, name1left+1, name2left+1);                           setLine(RESULT, name1left);:}
+				 	| ID:name1 ID:name2 LPAREN typeNameListComma:id RPAREN LBRACE stmtList:sl RBRACE	{: RESULT = new AST_DEC_FUNCDEC(name1, name2, id, sl, name1left+1, name2left+1); setLine(RESULT, name1left); :}
+				  	;
+
+classDec		::=    CLASS ID:name1 LBRACE cFieldList:cl RBRACE 			      		 {: RESULT = new AST_DEC_CLASSDEC(name1,null, cl, name1left+1, -1);            setLine(RESULT, name1left);:}
+					| CLASS ID:name1 EXTENDS ID:name2 LBRACE cFieldList:cl RBRACE       {: RESULT = new AST_DEC_CLASSDEC(name1, name2, cl, name1left+1, name2left+1);  setLine(RESULT, name1left);:}
+					;
+
+arrayDec	::= 	ARRAY ID:name1 EQ ID:name2 LBRACK RBRACK	{: RESULT = new AST_DEC_ARRAYDEC(name1, name2, name1left+1, name2left+1); setLine(RESULT, name1left);:}
+					;
+
+
+exp	::= 	var:v	{: RESULT = new AST_EXP_VAR(v); setLine(RESULT, vleft);          :}
+			| LPAREN exp:e RPAREN	{: RESULT = new AST_EXP_LPARENRPAREN(e);  setLine(RESULT, eleft);	:}
+			| exp:e1 PLUS  exp:e2	{: RESULT = new AST_EXP_BINOP(e1, e2, 0); setLine(RESULT, e1left);	:}
+			| exp:e1 MINUS exp:e2	{: RESULT = new AST_EXP_BINOP(e1, e2, 1); setLine(RESULT, e1left);	:}
+			| exp:e1 TIMES exp:e2	{: RESULT = new AST_EXP_BINOP(e1, e2, 2); setLine(RESULT, e1left);	:}
+			| exp:e1 DIVIDE exp:e2	{: RESULT = new AST_EXP_BINOP(e1, e2, 3); setLine(RESULT, e1left); :}
+			| exp:e1 LT exp:e2		{: RESULT = new AST_EXP_BINOP(e1, e2, 4); setLine(RESULT, e1left);	:}
+			| exp:e1 GT exp:e2		{: RESULT = new AST_EXP_BINOP(e1, e2, 5); setLine(RESULT, e1left);	:}
+			| exp:e1 EQ exp:e2		{: RESULT = new AST_EXP_BINOP(e1, e2, 6); setLine(RESULT, e1left);	:}
+			| expReg:er	{: RESULT = new AST_EXP_EXPREG(er); setLine(RESULT, erleft); :}
+			| INT:i	{: RESULT = new AST_EXP_INT(i); setLine(RESULT, ileft);          :}
+			| MINUS INT:i	{: RESULT = new AST_EXP_NEGATIVE_NUM(i); setLine(RESULT, ileft);         :}
+			| NIL:n	{: RESULT = new AST_EXP_NIL(); setLine(RESULT, nleft); :}
+			| STRING:s	{: RESULT = new AST_EXP_STRING(s); setLine(RESULT, sleft); :}
+			;
+
+newExp	::=  NEW ID:name	{: RESULT = new AST_NEW_EXP_NEWID(name); setLine(RESULT, nameleft); :}
+            | NEW ID:name LBRACK exp:ne RBRACK	{: RESULT = new AST_NEW_EXP_NEWID_BRACKES(name, ne); setLine(RESULT, nameleft); :}
+
+			;
+
+var	::= 	ID:name	{: RESULT = new AST_VAR_SIMPLE(name); setLine(RESULT, nameleft);      :}
+			| var:v DOT ID:fieldName	{: RESULT = new AST_VAR_FIELD(v,fieldName); setLine(RESULT, vleft); :}
+			| var:v LBRACK exp:e RBRACK	{: RESULT = new AST_VAR_SUBSCRIPT(v,e); setLine(RESULT, vleft);    :}
+			;
+
+stmt	::= varDec:v	{: RESULT = new AST_STMT_VARDEC(v); setLine(RESULT, vleft);:}
+			| var:v ASSIGN exp:e SEMICOLON	{: RESULT = new AST_STMT_ASSIGN_EXP(v,e); setLine(RESULT, vleft);:}
+			| var:v ASSIGN newExp:ne SEMICOLON	{: RESULT = new AST_STMT_ASSIGN_EXP(v,ne); setLine(RESULT, vleft);:}
+			| RETURN:r SEMICOLON	{: RESULT = new AST_STMT_RETURN(null); setLine(RESULT, rleft); :}
+			| RETURN:r exp:e SEMICOLON	{: RESULT = new AST_STMT_RETURN(e); setLine(RESULT, rleft); :}
+			| IF LPAREN exp:cond RPAREN LBRACE stmtList:body RBRACE	{: RESULT = new AST_STMT_IF(cond,body); setLine(RESULT, condleft); :}
+			| WHILE LPAREN exp:cond RPAREN LBRACE stmtList:body RBRACE	{: RESULT = new AST_STMT_WHILE(cond,body); setLine(RESULT, condleft); :}
+			| expReg:er SEMICOLON	{: RESULT = new AST_STMT_EXPREG(er); setLine(RESULT, erleft); :}
+			;
+
+cField	::= 	varDec :v	{: RESULT = new AST_CFIELD_VARDEC(v); setLine(RESULT, vleft);:}
+				| funcDec :f	{: RESULT = new AST_CFIELD_FUNCDEC(f); setLine(RESULT, fleft);:}
+				;
+
+typeName    ::=     ID:type ID:name	    {: RESULT = new AST_TYPE_NAME(type,name);  setLine(RESULT, typeleft);  :};
+
+typeNameListComma   ::=     typeName:tn COMMA typeNameListComma:tnl	    {: RESULT = new AST_TYPE_NAME_LIST(tn,tnl); setLine(RESULT, tnleft); :}
+							 | typeName:tn  {: RESULT = new AST_TYPE_NAME_LIST(tn,null); setLine(RESULT, tnleft);:};
+
+cFieldList	::= 	cField:c cFieldList:cl	{: RESULT = new AST_CFIELD_LIST(c, cl);   setLine(RESULT, cleft); :}
+					| cField:c	{: RESULT = new AST_CFIELD_LIST(c, null); setLine(RESULT, cleft);:}
+					;
+
+expReg	::= 	ID:name LPAREN expList:l RPAREN	{: RESULT = new AST_EXP_ID_EXP_LIST(l,name);  setLine(RESULT, nameleft);:}
+				| ID:name LPAREN RPAREN	{: RESULT = new AST_EXP_ID_EXP_LIST(null,name); setLine(RESULT, nameleft);:}
+				| var:v DOT ID:name LPAREN expList:e RPAREN	{: RESULT = new AST_EXP_VAR_DOT_ID_EXP_LIST(v,name,e); setLine(RESULT, vleft); :}
+				| var:v DOT ID:name LPAREN RPAREN	{: RESULT = new AST_EXP_VAR_DOT_ID_EXP_LIST(v,name,null); setLine(RESULT, vleft);:}
+				;
+
+expList	::= 	exp:e COMMA expList:l	{: RESULT = new AST_EXP_LIST(e,l); setLine(RESULT, eleft);   :}
+					| exp:e	{: RESULT = new AST_EXP_LIST(e,null);  setLine(RESULT, eleft);:}
+					;
+
+stmtList	::=	stmt:s	stmtList:l	{: RESULT = new AST_STMT_LIST(s,l);  setLine(RESULT, sleft);  :}
+				| stmt:s	{: RESULT = new AST_STMT_LIST(s,null); setLine(RESULT, sleft);:}
+				;
